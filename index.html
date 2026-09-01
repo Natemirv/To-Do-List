@@ -288,6 +288,7 @@ main{display:flex;flex-direction:column;flex:1;padding:0 18px}
   </div>
 
   <div class="tools">
+    <button type="button" id="badgeToggle">Badge off</button>
     <button type="button" id="editToggle">Categories</button>
     <button type="button" id="export">Copy backup</button>
     <button type="button" id="import">Restore</button>
@@ -333,7 +334,7 @@ var CHECK_SVG =
 var KEY = 'handled.v2', OLDKEY = 'handled.v1';
 var S = {
   v:2, cats:null, tasks:[], done:[],
-  filter:'all', picker:null,
+  filter:'all', picker:null, badge:false,
   doneToday:0, doneDate:'', streak:0, lastDone:''
 };
 
@@ -572,7 +573,7 @@ function emptyBlock(line, sub){
 }
 
 function render(){
-  paintReadout(); paintRail(); paintPicker();
+  paintReadout(); paintRail(); paintPicker(); paintBadge(); paintBadgeBtn();
   var h='';
 
   if (S.filter==='done'){
@@ -615,6 +616,50 @@ function render(){
   if (!items.length){ listEl.innerHTML=emptyBlock(esc(c.name)+' is clear.','add something below'); return; }
   listEl.innerHTML=items.map(function(t){ return taskHTML(t,false); }).join('');
 }
+
+/* ================= home screen badge ================= */
+var badgeBtn=document.getElementById('badgeToggle');
+
+function badgeSupported(){ return 'setAppBadge' in navigator; }
+function notifyGranted(){
+  return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+}
+function paintBadge(){
+  if (!badgeSupported()) return;
+  try{
+    if (S.badge && notifyGranted() && S.tasks.length){
+      var r = navigator.setAppBadge(S.tasks.length);
+      if (r && r.catch) r.catch(function(){});
+    } else {
+      var c = navigator.clearAppBadge();
+      if (c && c.catch) c.catch(function(){});
+    }
+  }catch(e){}
+}
+function paintBadgeBtn(){
+  var on = S.badge && notifyGranted();
+  badgeBtn.textContent = on ? 'Badge on' : 'Badge off';
+  badgeBtn.classList.toggle('on', on);
+}
+badgeBtn.addEventListener('click', function(){
+  if (S.badge){
+    S.badge=false; save(); paintBadge(); paintBadgeBtn(); toast('badge off'); return;
+  }
+  if (!badgeSupported() || typeof Notification === 'undefined'){
+    toast('open it from your home screen first'); return;
+  }
+  if (Notification.permission === 'denied'){
+    toast('turn on notifications for this app in settings'); return;
+  }
+  var done = function(perm){
+    if (perm === 'granted'){ S.badge=true; save(); paintBadge(); paintBadgeBtn(); toast('badge on'); }
+    else { toast('notifications not allowed'); paintBadgeBtn(); }
+  };
+  try{
+    var p = Notification.requestPermission(done);
+    if (p && p.then) p.then(done).catch(function(){ toast('could not turn that on'); });
+  }catch(e){ toast('could not turn that on'); }
+});
 
 /* ================= toast ================= */
 var toastEl=document.getElementById('toast'), toastT;
