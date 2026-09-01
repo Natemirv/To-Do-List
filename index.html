@@ -181,6 +181,23 @@ main{display:flex;flex-direction:column;flex:1;padding:0 18px}
 .dtask .check .ring{stroke:var(--go);fill:var(--go)}
 .dtask .check .tick{stroke-dashoffset:0}
 .dtask .ttitle{color:var(--dim);text-decoration:line-through;text-decoration-color:rgba(123,136,166,.45)}
+.dkill{
+  flex:none;width:30px;height:26px;color:var(--dimmer);display:grid;place-items:center;
+  font-size:19px;line-height:1;
+}
+.dkill:active{color:var(--oxide)}
+.donefoot{
+  display:flex;align-items:center;gap:12px;margin:16px 2px 0;
+  font-family:"DM Mono",ui-monospace,monospace;font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);
+}
+.donefoot span{flex:1;min-width:0}
+.clearall{
+  font-family:"DM Mono",ui-monospace,monospace;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;padding:7px 11px;border:1px solid var(--edge2);
+  border-radius:7px;color:var(--dim);white-space:nowrap;
+}
+.clearall.armed{color:var(--oxide);border-color:rgba(224,82,101,.45)}
 
 /* ---------- empty ---------- */
 .empty{
@@ -481,6 +498,18 @@ function uncomplete(id){
   if (dayKey(new Date(d.completedAt))===shiftDays(0) && S.doneToday>0) S.doneToday--;
   save(); render(); toast('back on the list');
 }
+function removeDone(id){
+  var d=null;
+  S.done = S.done.filter(function(x){ if (x.id===id){ d=x; return false; } return true; });
+  if (d && dayKey(new Date(d.completedAt))===shiftDays(0) && S.doneToday>0) S.doneToday--;
+  save(); render(); toast('removed');
+}
+function clearDone(){
+  var today=shiftDays(0), n=0;
+  S.done.forEach(function(d){ if (dayKey(new Date(d.completedAt))===today) n++; });
+  S.doneToday = Math.max(0, S.doneToday - n);
+  S.done = []; save(); render(); toast('done list cleared');
+}
 function removeTask(id){ S.tasks=S.tasks.filter(function(t){ return t.id!==id; }); save(); render(); }
 function keepTask(id){ var t=findTask(id); if (t){ t.touched=Date.now(); save(); render(); } }
 function moveTask(id,c){
@@ -592,10 +621,13 @@ function render(){
         return '<div class="dtask" data-done-id="'+d.id+'">'+
           '<button type="button" class="check" data-undo="'+d.id+'" aria-label="Put back">'+CHECK_SVG+'</button>'+
           '<div class="tbody"><span class="ttitle">'+esc(d.title)+'</span>'+
-          '<span class="tsub"><span class="dot" style="background:'+c.color+'"></span>'+esc(c.name)+'</span></div></div>';
+          '<span class="tsub"><span class="dot" style="background:'+c.color+'"></span>'+esc(c.name)+'</span></div>'+
+          '<button type="button" class="dkill" data-dkill="'+d.id+'" aria-label="Remove from done">&times;</button></div>';
       }).join('');
     });
-    h+='<div class="cathead" style="opacity:.6">kept for 7 days &middot; tap a check to put it back</div>';
+    h+='<div class="cathead" style="opacity:.6">check puts it back &middot; &times; removes it</div>'+
+       '<div class="donefoot"><span>kept for 7 days</span>'+
+       '<button type="button" class="clearall" data-clearall="1">Clear all</button></div>';
     listEl.innerHTML=h; return;
   }
 
@@ -690,6 +722,7 @@ pickEl.addEventListener('click',function(e){
 /* ================= list interactions ================= */
 railEl.addEventListener('click',function(e){
   var b=e.target.closest('[data-tab]'); if (!b) return;
+  clearArmed=false; clearTimeout(clearT);
   S.filter=b.dataset.tab;
   if (S.filter!=='all' && S.filter!=='done'){ S.picker=S.filter; }
   save(); render();
@@ -700,6 +733,18 @@ listEl.addEventListener('click',function(e){
   var b=e.target.closest('button'); if (!b) return;
   if (b.dataset.complete){ complete(b.dataset.complete); return; }
   if (b.dataset.undo)    { uncomplete(b.dataset.undo); return; }
+  if (b.dataset.dkill)   { removeDone(b.dataset.dkill); return; }
+  if (b.dataset.clearall){
+    if (!clearArmed){
+      clearArmed = true;
+      b.textContent = 'Tap again';
+      b.classList.add('armed');
+      clearTimeout(clearT);
+      clearT = setTimeout(function(){ clearArmed=false; render(); }, 3000);
+      return;
+    }
+    clearArmed = false; clearTimeout(clearT); clearDone(); return;
+  }
   if (b.dataset.keep)    { keepTask(b.dataset.keep); return; }
   if (b.dataset.kill)    { removeTask(b.dataset.kill); return; }
   if (b.dataset.move)    { moveTask(b.dataset.move, b.dataset.c); return; }
@@ -711,6 +756,8 @@ listEl.addEventListener('click',function(e){
     return;
   }
 });
+
+var clearArmed=false, clearT;
 
 /* swipe right to complete */
 var drag=null;
